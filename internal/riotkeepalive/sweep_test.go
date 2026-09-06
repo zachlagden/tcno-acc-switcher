@@ -330,3 +330,36 @@ func TestSweepOnceHaltsIfClientStartsMidSweep(t *testing.T) {
 		t.Fatalf("sweep did not halt: calls=%d results=%d", calls, len(results))
 	}
 }
+
+// A ticker-only design would never fire for someone who opens the app briefly to
+// switch accounts, so Run must sweep once before the first tick.
+func TestRunSweepsBeforeFirstTick(t *testing.T) {
+	root := t.TempDir()
+	seedAccount(t, root, "main", true)
+
+	hit := make(chan struct{}, 1)
+	s, done := newSweeper(t, root, func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case hit <- struct{}{}:
+		default:
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"AT","id_token":"I","refresh_token":"NEW_RT","expires_in":3600}`))
+	}, func() bool { return false })
+	defer done()
+
+	// An interval far longer than the test could ever wait: if a refresh happens,
+	// it can only have come from the initial sweep.
+	s.Interval = time.Hour
+	s.InitialDelay = time.Hour // ignored, because sleep is stubbed out
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.Run(ctx)
+
+	select {
+	case <-hit:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run never swept before the first tick")
+	}
+}

@@ -54,5 +54,24 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: pnpm run build
-      - name: Build root package (verifies main.go wiring)
-        run: go build .
+      - name: Build executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          Push-Location build
+          wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
+          Pop-Location
+          Copy-Item -Force "$env:GITHUB_WORKSPACE\other\NSIS\img\icon.ico" "$env:GITHUB_WORKSPACE\build\windows\icon.ico"
+          Push-Location build
+          wails3 generate syso -arch amd64 -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ..\wails_windows_amd64.syso
+          Pop-Location
+          go build -tags production,devtools -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o bin\TcNo-Acc-Switcher.exe
+          Remove-Item -Force *.syso
+      - name: Upload executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: TcNo-Acc-Switcher-keepalive
+          path: bin/TcNo-Acc-Switcher.exe
+          archive: false
+          if-no-files-found: error
+          retention-days: 14

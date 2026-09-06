@@ -24,6 +24,15 @@ const DefaultInterval = 12 * time.Hour
 // not arrive as a burst.
 const DefaultSpacing = 3 * time.Second
 
+// DefaultInitialDelay is how long after start-up the first sweep runs.
+//
+// There has to be a first sweep before the first tick. Most sessions with this app are
+// short — open it, switch account, close it — so a ticker-only design would mean the
+// keepalive effectively never runs for the people who need it. The delay exists only
+// to let a client that is launching alongside us settle; the running-client guard, not
+// this delay, is what actually keeps us off a live session.
+const DefaultInitialDelay = 60 * time.Second
+
 // ErrNoGuard is returned when a Sweeper is used without a running-client check.
 // This is deliberately fatal rather than defaulting to "no guard": refreshing an
 // account while Riot Client holds the same token is the one way this tool could
@@ -104,7 +113,9 @@ type Sweeper struct {
 	Client           *Client
 	Interval         time.Duration
 	Spacing          time.Duration
-	Log              *slog.Logger
+	// InitialDelay is the wait before the first sweep. Defaults to DefaultInitialDelay.
+	InitialDelay time.Duration
+	Log          *slog.Logger
 
 	// ClientRunning reports whether any Riot process is up. Required — see ErrNoGuard.
 	ClientRunning func() bool
@@ -144,46 +155,61 @@ func (s *Sweeper) pause(ctx context.Context, d time.Duration) {
 	}
 }
 
-// Run sweeps on a ticker until ctx is cancelled. It does not sweep immediately on
-// start: the app has just launched, which is exactly when a client is most likely
-// to be starting up alongside it.
+// Run sweeps shortly after start and then on a ticker, until ctx is cancelled.
 func (s *Sweeper) Run(ctx context.Context) {
 	interval := s.Interval
 	if interval <= 0 {
 		interval = DefaultInterval
 	}
+	initial := s.InitialDelay
+	if initial <= 0 {
+		initial = DefaultInitialDelay
+	}
+
+	s.pause(ctx, initial)
+	if ctx.Err() != nil {
+		return
+	}
+	s.sweepAndLog(ctx)
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			results, err := s.SweepOnce(ctx)
-			if err != nil {
-				if errors.Is(err, ErrClientRunning) {
-					s.logger().Debug("riot keepalive skipped", "reason", "client running")
-					continue
-				}
-				s.logger().Warn("riot keepalive sweep failed", "err", err)
-				continue
-			}
-			var ok, expired, failed int
-			for _, r := range results {
-				switch {
-				case r.Refreshed:
-					ok++
-				case r.NeedsLogin:
-					expired++
-				case r.Err != nil:
-					failed++
-				}
-			}
-			s.logger().Info("riot keepalive sweep complete",
-				"refreshed", ok, "needs_login", expired, "failed", failed)
+			s.sweepAndLog(ctx)
 		}
 	}
+}
+
+func (s *Sweeper) sweepAndLog(ctx context.Context) {
+	results, err := s.SweepOnce(ctx)
+	if err != nil {
+		if errors.Is(err, ErrClientRunning) {
+			s.logger().Debug("riot keepalive skipped", "reason", "client running")
+			return
+		}
+		s.logger().Warn("riot keepalive sweep failed", "err", err)
+		return
+	}
+	var ok, expired, failed int
+	for _, r := range results {
+		switch {
+		case r.Refreshed:
+			ok++
+		case r.NeedsLogin:
+			expired++
+		case r.Err != nil:
+			failed++
+		}
+	}
+	if ok+expired+failed == 0 {
+		return
+	}
+	s.logger().Info("riot keepalive sweep complete",
+		"refreshed", ok, "needs_login", expired, "failed", failed)
 }
 
 // SweepOnce refreshes every saved account exactly once.
