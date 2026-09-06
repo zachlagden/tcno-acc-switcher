@@ -1,6 +1,7 @@
 package basic
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -27,6 +28,9 @@ type BasicService struct {
 	imgRefreshCooldown  *perPlatformCooldown
 	imgRefreshCoalescer *perPlatformCoalescer
 	imgRefreshClock     func() time.Time
+
+	// riotKeepaliveCancel stops the background Riot session sweeper. Guarded by mu.
+	riotKeepaliveCancel context.CancelFunc
 }
 
 // imgRefreshMinInterval is the per-platform cooldown between background
