@@ -36,3 +36,16 @@ jobs:
         run: go build ./internal/...
       - name: Unit tests
         run: go test ./internal/riotkeepalive/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pnpm
+        run: npm install -g pnpm@11.0.8
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm run build
+      - name: Build root package (verifies main.go wiring)
+        run: go build .

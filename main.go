@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"log"
@@ -267,6 +268,11 @@ func main() {
 	}
 
 	legacyinstall.StartupCleanup(exeDir)
+
+	// Keep saved Riot sessions warm while the app is open. Safe to start
+	// unconditionally: the sweeper skips everything while a Riot client is
+	// running, and does nothing at all if no saved account carries a session.
+	basicSvc.StartRiotKeepalive(context.Background())
 
 	app.RunGUI(app.RunGUIParams{
 		Parsed:           parsed,
