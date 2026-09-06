@@ -1,6 +1,7 @@
 package riotkeepalive
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -71,20 +72,159 @@ func newSweeper(t *testing.T, root string, h http.HandlerFunc, running func() bo
 	c.HTTP = srv.Client()
 	c.Endpoint = srv.URL
 	s := &Sweeper{
-		CacheRoot:     root,
-		Client:        c,
-		ClientRunning: running,
-		Spacing:       time.Nanosecond,
-		now:           func() time.Time { return time.UnixMilli(1788700000000) },
-		sleep:         func(context.Context, time.Duration) {},
+		CacheRoot: root,
+		// Default: a live file that does not exist, i.e. nothing deployed.
+		LiveSettingsPath: filepath.Join(t.TempDir(), "live.yaml"),
+		Client:           c,
+		ClientRunning:    running,
+		Spacing:          time.Nanosecond,
+		now:              func() time.Time { return time.UnixMilli(1788700000000) },
+		sleep:            func(context.Context, time.Duration) {},
 	}
 	return s, srv.Close
 }
 
 func TestSweepOnceRequiresGuard(t *testing.T) {
-	s := &Sweeper{CacheRoot: t.TempDir()}
+	s := &Sweeper{CacheRoot: t.TempDir(), LiveSettingsPath: "live.yaml"}
 	if _, err := s.SweepOnce(context.Background()); !errors.Is(err, ErrNoGuard) {
 		t.Fatalf("want ErrNoGuard, got %v", err)
+	}
+}
+
+func TestSweepOnceRequiresLivePath(t *testing.T) {
+	s := &Sweeper{CacheRoot: t.TempDir(), ClientRunning: func() bool { return false }}
+	if _, err := s.SweepOnce(context.Background()); !errors.Is(err, ErrNoLivePath) {
+		t.Fatalf("want ErrNoLivePath, got %v", err)
+	}
+}
+
+// The account currently deployed to Riot's live settings file holds the same token as
+// its saved copy. Refreshing must rewrite both, or the live copy is left superseded
+// and the next launch replays a dead token.
+func TestSweepOnceUpdatesLiveFileForDeployedAccount(t *testing.T) {
+	root := t.TempDir()
+	saved := seedAccount(t, root, "main", true)
+	live := filepath.Join(t.TempDir(), "live.yaml")
+	if err := os.WriteFile(live, fixture(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, done := newSweeper(t, root, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"AT","id_token":"NEW_ID","refresh_token":"NEW_RT","expires_in":3600}`))
+	}, func() bool { return false })
+	defer done()
+	s.LiveSettingsPath = live
+
+	results, err := s.SweepOnce(context.Background())
+	if err != nil {
+		t.Fatalf("SweepOnce: %v", err)
+	}
+	if len(results) != 1 || !results[0].Refreshed || !results[0].Deployed {
+		t.Fatalf("unexpected results: %+v", results)
+	}
+
+	for label, path := range map[string]string{"saved": saved, "live": live} {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sess, err := Parse(data)
+		if err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		if sess.RefreshToken != "NEW_RT" {
+			t.Fatalf("%s copy left holding a superseded token: %q", label, sess.RefreshToken)
+		}
+	}
+}
+
+// A different account being deployed must not drag the live file along with it.
+func TestSweepOnceLeavesUnrelatedLiveFileAlone(t *testing.T) {
+	root := t.TempDir()
+	seedAccount(t, root, "main", true)
+	live := filepath.Join(t.TempDir(), "live.yaml")
+	other := bytes.Replace(fixture(), []byte("OLD_REFRESH_TOKEN"), []byte("SOMEONE_ELSES_TOKEN"), 1)
+	if err := os.WriteFile(live, other, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, done := newSweeper(t, root, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"AT","id_token":"NEW_ID","refresh_token":"NEW_RT","expires_in":3600}`))
+	}, func() bool { return false })
+	defer done()
+	s.LiveSettingsPath = live
+
+	results, err := s.SweepOnce(context.Background())
+	if err != nil {
+		t.Fatalf("SweepOnce: %v", err)
+	}
+	if results[0].Deployed {
+		t.Fatal("unrelated account reported as deployed")
+	}
+	after, _ := os.ReadFile(live)
+	if !bytes.Equal(after, other) {
+		t.Fatal("live file belonging to another account was modified")
+	}
+}
+
+// "Cannot tell" must mean "do not touch".
+func TestSweepOnceSkipsWhenLiveFileUnreadable(t *testing.T) {
+	root := t.TempDir()
+	saved := seedAccount(t, root, "main", true)
+	before, _ := os.ReadFile(saved)
+
+	live := filepath.Join(t.TempDir(), "live.yaml")
+	if err := os.WriteFile(live, []byte("psl: [this is: not valid\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	called := false
+	s, done := newSweeper(t, root, func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}, func() bool { return false })
+	defer done()
+	s.LiveSettingsPath = live
+
+	results, err := s.SweepOnce(context.Background())
+	if err != nil {
+		t.Fatalf("SweepOnce: %v", err)
+	}
+	if len(results) != 1 || results[0].Err == nil || results[0].Refreshed {
+		t.Fatalf("expected a skip with an error, got %+v", results)
+	}
+	if called {
+		t.Fatal("token endpoint contacted despite an unreadable live file")
+	}
+	after, _ := os.ReadFile(saved)
+	if !bytes.Equal(before, after) {
+		t.Fatal("saved file modified despite the skip")
+	}
+}
+
+// A live file with no persisted login means nothing is deployed.
+func TestSweepOnceLiveFileWithoutSessionIsNotDeployed(t *testing.T) {
+	root := t.TempDir()
+	seedAccount(t, root, "main", true)
+	live := filepath.Join(t.TempDir(), "live.yaml")
+	if err := os.WriteFile(live, []byte("riot-login:\r\n    persist: null\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s, done := newSweeper(t, root, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"AT","id_token":"I","refresh_token":"NEW_RT","expires_in":3600}`))
+	}, func() bool { return false })
+	defer done()
+	s.LiveSettingsPath = live
+
+	results, err := s.SweepOnce(context.Background())
+	if err != nil {
+		t.Fatalf("SweepOnce: %v", err)
+	}
+	if len(results) != 1 || !results[0].Refreshed || results[0].Deployed {
+		t.Fatalf("unexpected results: %+v", results)
 	}
 }
 

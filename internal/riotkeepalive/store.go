@@ -16,9 +16,14 @@
 //
 // IMPORTANT: Riot rotates the refresh token on every use (hence the write count).
 // Replaying a superseded refresh token is, under normal OAuth2 reuse detection,
-// treated as token theft and can revoke the whole token family. Everything in this
-// package is therefore written to (a) never refresh an account whose files are
-// currently live, and (b) write the rotated token back atomically or not at all.
+// treated as token theft and can revoke the whole token family.
+//
+// The invariant this package maintains is therefore: a refresh must never leave two
+// divergent copies of a session. One saved account is usually also the account
+// deployed to Riot's live settings file, holding the identical token; refreshing the
+// saved copy alone would silently strand the live one. So a refresh either updates
+// every copy of that session or reports that it could not, and it never runs at all
+// while a Riot client is up or while the live file cannot be read.
 package riotkeepalive
 
 import (

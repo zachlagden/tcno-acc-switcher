@@ -33,6 +33,14 @@ var ErrNoGuard = errors.New("riotkeepalive: Sweeper.ClientRunning must be set")
 // ErrClientRunning means the sweep was skipped because Riot was up.
 var ErrClientRunning = errors.New("riotkeepalive: Riot Client is running, skipping sweep")
 
+// ErrNoLivePath is returned when a Sweeper has no path to the live settings file.
+//
+// Required for the same reason as ErrNoGuard. One saved account is normally also the
+// account currently deployed to the live file, holding the very same refresh token. If
+// we refresh the saved copy without knowing that, the live copy is silently left
+// holding a superseded token, and the next launch replays it.
+var ErrNoLivePath = errors.New("riotkeepalive: Sweeper.LiveSettingsPath must be set")
+
 // Target is one saved account carrying a persisted session.
 type Target struct {
 	AccountName  string
@@ -43,6 +51,9 @@ type Target struct {
 type Result struct {
 	Target
 	Refreshed bool
+	// Deployed reports that this account's token was also sitting in the live
+	// settings file, so both copies were rewritten together.
+	Deployed bool
 	// NeedsLogin is set when Riot rejected the token outright. Callers should
 	// surface this in the UI — no retry will recover it.
 	NeedsLogin bool
@@ -87,10 +98,13 @@ func CollectTargets(cacheRoot string) ([]Target, error) {
 // Sweeper periodically refreshes every saved Riot account.
 type Sweeper struct {
 	CacheRoot string
-	Client    *Client
-	Interval  time.Duration
-	Spacing   time.Duration
-	Log       *slog.Logger
+	// LiveSettingsPath is the Riot Client's in-use settings file. Required — see
+	// ErrNoLivePath.
+	LiveSettingsPath string
+	Client           *Client
+	Interval         time.Duration
+	Spacing          time.Duration
+	Log              *slog.Logger
 
 	// ClientRunning reports whether any Riot process is up. Required — see ErrNoGuard.
 	ClientRunning func() bool
@@ -181,6 +195,9 @@ func (s *Sweeper) SweepOnce(ctx context.Context) ([]Result, error) {
 	if s.ClientRunning == nil {
 		return nil, ErrNoGuard
 	}
+	if s.LiveSettingsPath == "" {
+		return nil, ErrNoLivePath
+	}
 	if s.ClientRunning() {
 		return nil, ErrClientRunning
 	}
@@ -230,10 +247,21 @@ func (s *Sweeper) refreshOne(ctx context.Context, client *Client, t Target) Resu
 	}
 	sess, err := Parse(data)
 	if err != nil {
-		// No session or a DPoP-bound one: nothing to do, and not an error worth alarming about.
+		// No session, or a DPoP-bound one: nothing to do, and not alarming.
 		res.Err = err
 		return res
 	}
+
+	// Work out whether this saved account is also the one currently deployed. If the
+	// live file carries the same refresh token, the two files are the same session and
+	// must be rewritten together or not at all.
+	liveData, deployed, err := s.liveState(sess.RefreshToken)
+	if err != nil {
+		// We cannot tell. Refreshing now might strand the live copy, so don't.
+		res.Err = fmt.Errorf("skipped, live settings file unreadable: %w", err)
+		return res
+	}
+	res.Deployed = deployed
 
 	tok, err := client.Refresh(ctx, sess.RefreshToken)
 	if err != nil {
@@ -242,20 +270,59 @@ func (s *Sweeper) refreshOne(ctx context.Context, client *Client, t Target) Resu
 		return res
 	}
 
-	updated, err := Apply(data, tok, s.timeNow().UnixMilli())
-	if err != nil {
-		// We hold a rotated token we cannot persist. Say so loudly: the saved copy is
-		// now stale, and restoring it later may trip reuse detection.
-		res.Err = fmt.Errorf("refreshed but could not persist (saved token is now stale): %w", err)
-		return res
+	// From here the old token is dead and only the new one is usable. Every copy of
+	// it has to be updated, and the live file goes first: if the second write fails,
+	// a stale saved copy is recoverable on the next swap-out, whereas a stale live
+	// copy breaks the very next launch.
+	now := s.timeNow().UnixMilli()
+	if deployed {
+		updatedLive, err := Apply(liveData, tok, now)
+		if err == nil {
+			err = writeFileAtomic(s.LiveSettingsPath, updatedLive)
+		}
+		if err != nil {
+			res.Err = fmt.Errorf("refreshed but the live settings file is now stale "+
+				"(sign in again if the client rejects the session): %w", err)
+			return res
+		}
 	}
-	if err := writeFileAtomic(t.SettingsPath, updated); err != nil {
-		res.Err = fmt.Errorf("refreshed but could not persist (saved token is now stale): %w", err)
+
+	updated, err := Apply(data, tok, now)
+	if err == nil {
+		err = writeFileAtomic(t.SettingsPath, updated)
+	}
+	if err != nil {
+		res.Err = fmt.Errorf("refreshed but could not persist to the saved account "+
+			"(its stored token is now stale; re-save it before switching to it): %w", err)
 		return res
 	}
 
 	res.Refreshed = true
 	return res
+}
+
+// liveState reports whether the live settings file holds the given refresh token,
+// returning its bytes so a matching account can be rewritten in step.
+//
+// A live file that is missing, or that holds no session at all, simply means nothing
+// is deployed — that is not an error. Anything else is, because "unknown" must not be
+// treated as "not deployed".
+func (s *Sweeper) liveState(savedToken string) (data []byte, deployed bool, err error) {
+	data, err = os.ReadFile(s.LiveSettingsPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	live, err := Parse(data)
+	if err != nil {
+		if errors.Is(err, ErrNoSession) || errors.Is(err, ErrDPoPBound) {
+			return data, false, nil
+		}
+		return nil, false, err
+	}
+	return data, live.RefreshToken == savedToken, nil
 }
 
 // writeFileAtomic writes via a temp file in the same directory and renames over the

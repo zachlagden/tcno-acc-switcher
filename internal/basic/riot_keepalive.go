@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"TcNo-Acc-Switcher/internal/platform"
 	"TcNo-Acc-Switcher/internal/riotkeepalive"
 )
 
@@ -32,6 +33,23 @@ func riotClientRunning() bool {
 	return false
 }
 
+// riotLiveSettingsPath resolves the Riot Client's in-use settings file.
+//
+// Derived from the descriptor's LoginFiles rather than hardcoded, so it follows
+// Platforms.json if Riot moves the file again. Falls back to the known location if
+// the descriptor cannot be read.
+func riotLiveSettingsPath() string {
+	if descriptor, _, err := readDescriptor(riotPlatformKey); err == nil {
+		for liveKey, cacheRel := range descriptor.LoginFiles {
+			if cacheRel == riotkeepalive.SettingsFileName {
+				return platform.ExpandWindowsPath(liveKey)
+			}
+		}
+	}
+	return platform.ExpandWindowsPath(
+		`%LocalAppData%\Riot Games\Riot Client\Data\` + riotkeepalive.SettingsFileName)
+}
+
 func riotKeepaliveLog() *slog.Logger {
 	return slog.Default().With("component", "riotkeepalive")
 }
@@ -44,13 +62,19 @@ func (b *BasicService) newRiotSweeper() *riotkeepalive.Sweeper {
 		riotKeepaliveLog().Warn("riot keepalive disabled: no login cache path", "err", err)
 		return nil
 	}
+	live := riotLiveSettingsPath()
+	if live == "" {
+		riotKeepaliveLog().Warn("riot keepalive disabled: no live settings path")
+		return nil
+	}
 	return &riotkeepalive.Sweeper{
-		CacheRoot:     root,
-		Client:        riotkeepalive.NewClient(),
-		Interval:      riotkeepalive.DefaultInterval,
-		Spacing:       riotkeepalive.DefaultSpacing,
-		Log:           riotKeepaliveLog(),
-		ClientRunning: riotClientRunning,
+		CacheRoot:        root,
+		LiveSettingsPath: live,
+		Client:           riotkeepalive.NewClient(),
+		Interval:         riotkeepalive.DefaultInterval,
+		Spacing:          riotkeepalive.DefaultSpacing,
+		Log:              riotKeepaliveLog(),
+		ClientRunning:    riotClientRunning,
 	}
 }
 
