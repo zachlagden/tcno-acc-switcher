@@ -1,5 +1,8 @@
 name: Keepalive CI
 
+env:
+  WAILS3_VERSION: v3.0.0-beta.12
+
 on:
   push:
     branches: [riot-keepalive]
@@ -44,6 +47,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: pnpm install --frozen-lockfile
+      - name: Install wails3
+        run: go install "github.com/wailsapp/wails/v3/cmd/wails3@$env:WAILS3_VERSION"
+      - name: Generate bindings
+        run: wails3 generate bindings -f "-tags production,devtools" -clean=true -ts
       - name: Build frontend
         working-directory: frontend
         run: pnpm run build
