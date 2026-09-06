@@ -51,6 +51,7 @@ require (
 	golang.org/x/exp v0.0.0-20260528193900-50dc527dd6c7 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 replace github.com/Jleagle/unmarshal-go v0.0.0-20210227002040-694f544f9265 => github.com/Jleagle/unmarshal-go v0.0.0-20260702203424-38325863b365

@@ -1,0 +1,38 @@
+name: Keepalive CI
+
+on:
+  push:
+    branches: [riot-keepalive]
+  workflow_dispatch:
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit tests
+        run: go test -v ./internal/riotkeepalive/
+      - name: Vet
+        run: go vet ./internal/riotkeepalive/
+      - name: Cross-compile to Windows
+        env:
+          GOOS: windows
+          CGO_ENABLED: "0"
+        run: go build ./internal/...
+
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build all packages
+        run: go build ./internal/...
+      - name: Unit tests
+        run: go test ./internal/riotkeepalive/
