@@ -72,6 +72,5 @@ jobs:
         with:
           name: TcNo-Acc-Switcher-keepalive
           path: bin/TcNo-Acc-Switcher.exe
-          archive: false
           if-no-files-found: error
           retention-days: 14
