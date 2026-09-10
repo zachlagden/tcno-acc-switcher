@@ -85,7 +85,8 @@
       r.page === "platform-settings" ||
       r.page === "steam-advanced-clearing" ||
       r.page === "steam-confirmations" ||
-      r.page === "steam-server-picker";
+      r.page === "steam-server-picker" ||
+      r.page === "wispr-stats";
     if (isPlatformPage && plat.hasImage) return plat;
     if (app.hasImage) return app;
     if (!userOverridden && themeBgUrl) {
@@ -219,6 +220,8 @@
       r.page === "steam-server-picker"
     ) {
       void loadPlatformBg("Steam");
+    } else if (r.page === "wispr-stats") {
+      void loadPlatformBg("Wispr Flow");
     } else {
       clearPlatformBg();
     }
@@ -591,6 +594,8 @@
             {:else if $route.page === "steam-browser"}
               <Page />
             {:else if $route.page === "manage-platforms"}
+              <Page />
+            {:else if $route.page === "wispr-stats"}
               <Page />
             {/if}
           {/await}

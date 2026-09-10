@@ -10,7 +10,8 @@ export type Route =
   | { page: "steam-advanced-clearing" }
   | { page: "steam-confirmations" }
   | { page: "steam-server-picker" }
-  | { page: "steam-browser"; sessionId: string };
+  | { page: "steam-browser"; sessionId: string }
+  | { page: "wispr-stats" };
 
 export function serializeRoute(r: Route): string {
   switch (r.page) {
@@ -34,6 +35,8 @@ export function serializeRoute(r: Route): string {
       return "#/steam/server-picker";
     case "steam-browser":
       return "#/steam/browser/" + encodeURIComponent(r.sessionId);
+    case "wispr-stats":
+      return "#/wispr/stats";
     default:
       return "#/";
   }
@@ -61,6 +64,7 @@ const ROUTE_PARSERS: Record<string, RouteParser> = {
       default:                  return null;
     }
   },
+  wispr:                (p) => p[1]?.toLowerCase() === "stats" ? { page: "wispr-stats" } : null,
 };
 
 export function parseHash(hash: string): Route | null {
@@ -95,6 +99,8 @@ export function validateRoute(r: Route, startup: PlatformStartup): Route {
     case "steam-confirmations":
     case "steam-server-picker":
       return nameOk("Steam") ? r : { page: "home" };
+    case "wispr-stats":
+      return nameOk("Wispr Flow") ? r : { page: "home" };
     default:
       return r;
   }

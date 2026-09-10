@@ -169,6 +169,22 @@
           </button
         >
       {/if}
+      {#if platformName === "Wispr Flow"}
+        <button
+          class="square actionbar__wispr-stats"
+          type="button"
+          aria-label={$t("WisprStats_Button")}
+          use:tooltip={$t("WisprStats_Button")}
+          on:mouseenter={() => prefetchPage({ page: "wispr-stats" })}
+          on:focus={() => prefetchPage({ page: "wispr-stats" })}
+          on:click={() => route.set({ page: "wispr-stats" })}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 20V10h3v10H4Zm6.5 0V4h3v16h-3ZM17 20v-7h3v7h-3Z"/>
+            </svg>
+          </button
+        >
+      {/if}
       <button
         bind:this={filterBtn}
         class="square actionbar__filter"
