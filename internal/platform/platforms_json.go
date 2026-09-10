@@ -75,6 +75,14 @@ func LoadPlatformsJSON(exeDir string) ([]byte, error) {
 			}
 			base = merged
 		}
+		if merged, changed, err := restoreEmbeddedForkPlatforms(base, embeddedPlatformsJSON); err != nil {
+			return nil, fmt.Errorf("restore embedded fork platforms: %w", err)
+		} else if changed {
+			if err := atomicWriteBytes(basePath, merged, 0o644); err != nil {
+				return nil, fmt.Errorf("write %s: %w", basePath, err)
+			}
+			base = merged
+		}
 	}
 	customPath := filepath.Join(UserDataDir(exeDir), "Platforms.custom.json")
 	custom, err := os.ReadFile(customPath)
