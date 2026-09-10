@@ -74,17 +74,12 @@ func TestEmbeddedUpdaterKeyNormalizes(t *testing.T) {
 	}
 }
 
-// Known-answer vector: sha256 of the published v4.0.6 TcNo-Acc-Switcher.exe
-// and its .exe.sig release asset. Proves updater-key.pub matches the CI
-// signing secret (UPDATER_KEY), not just that it parses — if this fails
-// after a deliberate key rotation, re-pin the vector from the first release
-// signed with the new key.
 func TestEmbeddedUpdaterKeyMatchesReleaseSignature(t *testing.T) {
-	digest, err := hex.DecodeString("d3a4d5e063e4ecff7d76938fc7a0a4794802492cdec1b7c6a0f236b6e35f1d73")
+	digest, err := hex.DecodeString("e3ed28b968c4db2bd565b8d5430768e387cad5bd5f7f45fcde719c8bc5f56c3f")
 	if err != nil {
 		t.Fatal(err)
 	}
-	sig, err := base64.StdEncoding.DecodeString("/tEpODL7wUgSuJXhkPewe6FVOwgH21lneAvn4V7nbdL41/tFYDD6Ce2nNv0ZTyjFn74OdTcSF58Rm5dKcXpiCA==")
+	sig, err := base64.StdEncoding.DecodeString("o0r8o6VUbVF7mrB1b/iJXJ5KdTlZJ+d3/l77Zj10R9beIFHdS9BOuwmTuWLZfe6D6HjXZOiGtWa/DdWgAgeZAw==")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +89,7 @@ func TestEmbeddedUpdaterKeyMatchesReleaseSignature(t *testing.T) {
 		t.Fatalf("normalized key is %d bytes, want %d", len(key), ed25519.PublicKeySize)
 	}
 	if !ed25519.Verify(ed25519.PublicKey(key), digest, sig) {
-		t.Fatal("v4.0.6 release signature does not verify against updater-key.pub; released updates will fail to install")
+		t.Fatal("updater signing vector does not verify against updater-key.pub; released updates will fail to install")
 	}
 }
 

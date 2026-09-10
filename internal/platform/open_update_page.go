@@ -1,8 +1,8 @@
 package platform
 
-const updateDownloadPageURL = "https://github.com/TCNOco/TcNo-Acc-Switcher/releases/latest"
+import "TcNo-Acc-Switcher/internal/updatecheck"
 
 // OpenUpdateDownloadPage opens the latest GitHub release page in the default browser.
 func (p *PlatformService) OpenUpdateDownloadPage() error {
-	return OpenURL(updateDownloadPageURL)
+	return OpenURL(updatecheck.ReleasePageURL)
 }

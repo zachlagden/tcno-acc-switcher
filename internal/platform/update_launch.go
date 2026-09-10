@@ -40,7 +40,7 @@ func emitAppUpdateAvailable(message string) {
 	if app == nil {
 		return
 	}
-	const downloadURL = "https://github.com/TCNOco/TcNo-Acc-Switcher/releases/latest"
+	const downloadURL = updatecheck.ReleasePageURL
 	_ = app.Event.Emit(AppUpdateAvailableEvent, UpdateAvailablePayload{
 		Message:     message,
 		DownloadURL: downloadURL,

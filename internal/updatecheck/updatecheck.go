@@ -62,25 +62,23 @@ func FetchLatestVersion(ctx context.Context, client *http.Client, currentVersion
 		return "", "", err
 	}
 	req.Header.Set("User-Agent", api.UserAgent(strings.TrimSpace(currentVersion)))
+	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", "", err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxLatestReleaseBytes))
 	if err != nil {
 		return "", "", err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", "", fmt.Errorf("updatecheck: HTTP %d", resp.StatusCode)
 	}
-	lines := strings.SplitN(strings.TrimSpace(string(body)), "\n", 2)
-	version = strings.TrimSpace(lines[0])
-	if len(lines) > 1 {
-		message = strings.TrimSpace(lines[1])
-	}
-	return version, message, nil
+	return parseLatestRelease(body)
 }
+
+const maxLatestReleaseBytes = 1 << 20
 
 // FetchLaunchAPICheck hits the tcno.co API endpoint used for launch telemetry
 // and update fallback data.
