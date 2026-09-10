@@ -18,11 +18,8 @@ env:
   GOSUMDB: sum.golang.org
   GOTOOLCHAIN: auto
   WAILS3_VERSION: v3.0.0-beta.12
-  CANONICAL_REPOSITORY: TCNOco/TcNo-Acc-Switcher
-  SIGNPATH_ORGANIZATION_ID: a2a88c4e-72da-4d2c-925e-91f41aff9d77
-  SIGNPATH_PROJECT_SLUG: TcNo-Acc-Switcher
-  SIGNPATH_POLICY_SLUG: Release-Signing_
-  SIGNPATH_WAIT_TIMEOUT_SECONDS: "14400"
+  CANONICAL_REPOSITORY: zachlagden/tcno-acc-switcher
+  RELEASE_BRANCH: main
 
 jobs:
   release-gate:
@@ -32,96 +29,67 @@ jobs:
       contents: read
     outputs:
       allowed: ${{ steps.gate.outputs.allowed }}
-      reason: ${{ steps.gate.outputs.reason }}
-      tag-commit: ${{ steps.gate.outputs.tag_commit }}
 
     steps:
-      - name: Checkout tag and master history
-        uses: actions/checkout@v7
+      - name: Checkout tag and release branch history
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify canonical tag on master
+      - name: Verify the tag is on the release branch
         id: gate
         shell: bash
-        env:
-          EVENT_CREATED: ${{ github.event.created }}
-          EVENT_DELETED: ${{ github.event.deleted }}
         run: |
           set -euo pipefail
-
           allowed=false
-          reason="release gate did not pass"
-          tag_commit=""
           canonical="${CANONICAL_REPOSITORY,,}"
           repository="${GITHUB_REPOSITORY,,}"
-
           if [[ "$repository" != "$canonical" ]]; then
             reason="repository '$GITHUB_REPOSITORY' is not '$CANONICAL_REPOSITORY'"
-          elif [[ "$GITHUB_EVENT_NAME" != "push" ]]; then
-            reason="event '$GITHUB_EVENT_NAME' is not push"
           elif [[ "$GITHUB_REF" != refs/tags/v* ]]; then
             reason="ref '$GITHUB_REF' is not a v* tag"
-          elif [[ "$EVENT_CREATED" != "true" ]]; then
-            reason="tag ref was not newly created"
-          elif [[ "$EVENT_DELETED" == "true" ]]; then
-            reason="tag ref was deleted"
           else
-            git fetch --force origin master:refs/remotes/origin/master
+            git fetch --force origin "$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH"
             tag_commit="$(git rev-parse "${GITHUB_REF}^{commit}")"
-            master_head="$(git rev-parse "refs/remotes/origin/master^{commit}")"
-
-            if git merge-base --is-ancestor "$tag_commit" "$master_head"; then
+            branch_head="$(git rev-parse "refs/remotes/origin/$RELEASE_BRANCH^{commit}")"
+            if git merge-base --is-ancestor "$tag_commit" "$branch_head"; then
               allowed=true
-              reason="tag '$GITHUB_REF_NAME' targets commit $tag_commit, which is reachable from origin/master"
+              reason="tag '$GITHUB_REF_NAME' targets $tag_commit on $RELEASE_BRANCH"
             else
-              reason="tag '$GITHUB_REF_NAME' targets commit $tag_commit, which is not reachable from origin/master"
+              reason="tag '$GITHUB_REF_NAME' targets $tag_commit, which is not on $RELEASE_BRANCH"
             fi
           fi
-
           echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
-          echo "reason=$reason" >> "$GITHUB_OUTPUT"
-          echo "tag_commit=$tag_commit" >> "$GITHUB_OUTPUT"
           echo "$reason"
 
   windows-release:
-    name: Build, sign, and draft release
+    name: Build, sign, and publish release
     needs: release-gate
     if: needs.release-gate.outputs.allowed == 'true'
     runs-on: windows-2022
-    timeout-minutes: 480
-    environment: release-signing
+    timeout-minutes: 90
     permissions:
-      actions: read
       contents: write
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Verify release secrets
+      - name: Verify release secret
         shell: pwsh
         env:
-          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
           UPDATER_KEY: ${{ secrets.UPDATER_KEY }}
         run: |
-          $missing = @()
-          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) {
-            $missing += 'SIGNPATH_API_TOKEN'
-          }
           if ([string]::IsNullOrWhiteSpace($env:UPDATER_KEY)) {
-            $missing += 'UPDATER_KEY'
+            throw 'Missing release secret UPDATER_KEY. Add the updater private key as a repository Actions secret.'
           }
-          if ($missing.Count -gt 0) {
-            throw "Missing release secret(s): $($missing -join ', '). Add them to the 'release-signing' environment or repository Actions secrets."
-          }
-          Write-Host 'Release secrets are present.'
+          Write-Host 'Release secret is present.'
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           check-latest: true
@@ -130,11 +98,11 @@ jobs:
       - name: Verify Go dependency policy
         run: go test ./internal/dependencypolicy
 
-      - name: Verify updater signing key
+      - name: Verify updater
         run: go test ./internal/updatecheck
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v4
         with:
           node-version: 24
 
@@ -159,7 +127,6 @@ jobs:
           $env:Path = "$goBin;$env:Path"
           Add-Content -Path $env:GITHUB_PATH -Value $goBin
           go install "github.com/wailsapp/wails/v3/cmd/wails3@$env:WAILS3_VERSION"
-          cmd /c "wails3 version 2>&1"
 
       - name: Prepare release version
         shell: pwsh
@@ -178,87 +145,54 @@ jobs:
           PRODUCTION: "true"
         run: pnpm run build
 
-      - name: Build unsigned executable
+      - name: Build executable
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          New-Item -ItemType Directory -Force -Path bin\build | Out-Null
           Push-Location build
-          wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
+          wails3 generate syso -arch amd64 -icon ..\other\NSIS\img\icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ..\wails_windows_amd64.syso
           Pop-Location
-          Copy-Item -Force "$env:GITHUB_WORKSPACE\other\NSIS\img\icon.ico" "$env:GITHUB_WORKSPACE\build\windows\icon.ico"
-          Push-Location build
-          wails3 generate syso -arch amd64 -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ..\wails_windows_amd64.syso
-          Pop-Location
-          go build -tags production,devtools -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o bin\TcNo-Acc-Switcher.exe
+          go build -tags production,devtools -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o bin\build\TcNo-Acc-Switcher.exe
           Remove-Item -Force *.syso
 
-      - name: Upload unsigned executable for SignPath
-        id: upload-unsigned-exe
-        uses: actions/upload-artifact@v7
-        with:
-          path: bin/TcNo-Acc-Switcher.exe
-          archive: false
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Sign executable with SignPath
-        id: sign-exe
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ env.SIGNPATH_POLICY_SLUG }}
-          github-artifact-id: ${{ steps.upload-unsigned-exe.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: ${{ env.SIGNPATH_WAIT_TIMEOUT_SECONDS }}
-          output-artifact-directory: ${{ github.workspace }}/signed-exe
-          skip-decompress: true
-
-      - name: Package installer from signed executable
+      - name: Sign for the updater and package
         shell: pwsh
         env:
           UPDATER_KEY: ${{ secrets.UPDATER_KEY }}
-        run: .\other\github-release.ps1 -Step PackageInstaller -SignedExePath "$env:GITHUB_WORKSPACE\signed-exe\TcNo-Acc-Switcher.exe"
-
-      - name: Upload unsigned installer for SignPath
-        id: upload-unsigned-installer
-        uses: actions/upload-artifact@v7
-        with:
-          path: build/windows/nsis/TcNo Account Switcher Installer.exe
-          archive: false
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Sign installer with SignPath
-        id: sign-installer
-        uses: signpath/github-action-submit-signing-request@v2
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ env.SIGNPATH_POLICY_SLUG }}
-          github-artifact-id: ${{ steps.upload-unsigned-installer.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: ${{ env.SIGNPATH_WAIT_TIMEOUT_SECONDS }}
-          output-artifact-directory: ${{ github.workspace }}/signed-installer
-          skip-decompress: true
+        run: .\other\github-release.ps1 -Step PackageInstaller -SignedExePath "$env:GITHUB_WORKSPACE\bin\build\TcNo-Acc-Switcher.exe"
 
       - name: Verify release artifacts
         shell: pwsh
-        run: .\other\github-release.ps1 -Step VerifyReleaseArtifacts -SignedInstallerPath "$env:GITHUB_WORKSPACE\signed-installer\TcNo Account Switcher Installer.exe"
+        run: .\other\github-release.ps1 -Step VerifyReleaseArtifacts -SignedInstallerPath "$env:UNSIGNED_INSTALLER_PATH"
 
-      - name: Publish draft GitHub release
-        uses: softprops/action-gh-release@v3
+      - name: Stage installer, catalogs and release notes
+        shell: pwsh
+        run: |
+          Copy-Item -Force "$env:UNSIGNED_INSTALLER_PATH" "bin\TcNo Account Switcher Installer.exe"
+          Copy-Item -Force Platforms.json, Platforms.mac.json, Platforms.linux.json bin\
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          $lines = Get-Content CHANGELOG.md
+          $start = ($lines | Select-String -SimpleMatch "## [$version]" | Select-Object -First 1).LineNumber
+          if (-not $start) { throw "CHANGELOG.md has no entry for $version" }
+          $rest = $lines[$start..($lines.Count - 1)]
+          $next = ($rest | Select-String -Pattern '^## \[' | Select-Object -First 1).LineNumber
+          $body = if ($next) { $rest[0..($next - 2)] } else { $rest }
+          $body | Out-File -Encoding utf8 release-notes.md
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           prerelease: false
-          name: Release ${{ github.ref_name }}
-          body: Release ${{ github.ref_name }}
+          name: TcNo Account Switcher ${{ github.ref_name }}
+          body_path: release-notes.md
           fail_on_unmatched_files: true
           files: |
-            signed-installer/TcNo Account Switcher Installer.exe
+            bin/TcNo Account Switcher Installer.exe
             bin/TcNo-Acc-Switcher.exe
             bin/TcNo-Acc-Switcher.exe.sig
             bin/TcNo-Acc-Switcher.7z
             bin/SHA256SUMS
+            bin/Platforms.json
+            bin/Platforms.mac.json
+            bin/Platforms.linux.json
