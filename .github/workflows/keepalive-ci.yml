@@ -1,0 +1,76 @@
+name: Keepalive CI
+
+env:
+  WAILS3_VERSION: v3.0.0-beta.12
+
+on:
+  push:
+    branches: [riot-keepalive]
+  workflow_dispatch:
+
+jobs:
+  test-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Unit tests
+        run: go test -v ./internal/riotkeepalive/
+      - name: Vet
+        run: go vet ./internal/riotkeepalive/
+      - name: Cross-compile to Windows
+        env:
+          GOOS: windows
+          CGO_ENABLED: "0"
+        run: go build ./internal/...
+
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build all packages
+        run: go build ./internal/...
+      - name: Unit tests
+        run: go test ./internal/riotkeepalive/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install pnpm
+        run: npm install -g pnpm@11.0.8
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+      - name: Install wails3
+        run: go install "github.com/wailsapp/wails/v3/cmd/wails3@$env:WAILS3_VERSION"
+      - name: Generate bindings
+        run: wails3 generate bindings -f "-tags production,devtools" -clean=true -ts
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm run build
+      - name: Build executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          Push-Location build
+          wails3 generate icons -input appicon.png -macfilename darwin/icons.icns -windowsfilename windows/icon.ico
+          Pop-Location
+          Copy-Item -Force "$env:GITHUB_WORKSPACE\other\NSIS\img\icon.ico" "$env:GITHUB_WORKSPACE\build\windows\icon.ico"
+          Push-Location build
+          wails3 generate syso -arch amd64 -icon windows/icon.ico -manifest windows/wails.exe.manifest -info windows/info.json -out ..\wails_windows_amd64.syso
+          Pop-Location
+          go build -tags production,devtools -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui" -o bin\TcNo-Acc-Switcher.exe
+          Remove-Item -Force *.syso
+      - name: Upload executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: TcNo-Acc-Switcher-keepalive
+          path: bin/TcNo-Acc-Switcher.exe
+          if-no-files-found: error
+          retention-days: 14

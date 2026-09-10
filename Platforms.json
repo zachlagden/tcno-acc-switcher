@@ -262,6 +262,7 @@
         "%LocalAppData%\\Riot Games\\Riot Client\\Data\\Cookies\\": "Cookies",
         "%LocalAppData%\\Riot Games\\Riot Client\\Data\\Sessions\\": "Sessions",
         "%LocalAppData%\\Riot Games\\Riot Client\\Data": "RiotClientPrivateSettings.yaml",
+      "%LocalAppData%\\Riot Games\\Riot Client\\Data\\RiotGamesPrivateSettings.yaml": "RiotGamesPrivateSettings.yaml",
         "%LocalAppData%\\Riot Games\\Riot Client\\Config": "RiotClientSettings.yaml",
         "%LocalAppData%\\Riot Games\\Riot Client\\TcNoAccSwitcher-ID.instance": "TcNoAccSwitcher-ID.instance"
       },
