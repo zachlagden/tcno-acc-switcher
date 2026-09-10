@@ -81,7 +81,7 @@ func TestDisabledByDefaultPlatforms_shippedCatalog(t *testing.T) {
 		t.Fatalf("read Platforms.json: %v", err)
 	}
 	got := disabledByDefaultPlatforms(raw)
-	for _, name := range []string{"OBS Studio", "GeForce Now", "PS Remote Play", "Discord", "Discord Canary", "Discord PTB"} {
+	for _, name := range []string{"OBS Studio", "GeForce Now", "PS Remote Play", "Discord", "Discord Canary", "Discord PTB", "Wispr Flow"} {
 		if _, ok := got[name]; !ok {
 			t.Errorf("%s should be DisabledByDefault", name)
 		}

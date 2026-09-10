@@ -245,6 +245,42 @@
       "UniqueIdFile": "leveldb:%AppData%\\discordptb\\Local Storage\\leveldb:_https://ptb.discord.comMultiAccountStore:_state.users.0.id",
       "UniqueIdMethod": "LEVELDB"
     },
+    "Wispr Flow": {
+      "Identifiers": [ "wf", "wispr", "wisprflow" ],
+      "ExeLocationDefault": "%LocalAppData%\\WisprFlow\\Wispr Flow.exe",
+      "GetPathFromShortcutNamed": "Wispr Flow",
+      "ExesToEnd": [ "Wispr Flow.exe", "Wispr Flow Helper.exe" ],
+      "PathListToClear": [ "SAME_AS_LOGIN_FILES" ],
+      "LoginFiles": {
+        "%AppData%\\Wispr Flow\\session.json": "session.json",
+        "%AppData%\\Wispr Flow\\config.json": "config.json",
+        "%AppData%\\Wispr Flow\\feature-flags-cache.json": "feature-flags-cache.json",
+        "%AppData%\\Wispr Flow\\flow.sqlite": "flow.sqlite",
+        "%AppData%\\Wispr Flow\\flow.sqlite-wal": "flow.sqlite-wal",
+        "%AppData%\\Wispr Flow\\flow.sqlite-shm": "flow.sqlite-shm",
+        "%AppData%\\Wispr Flow\\Local Storage\\leveldb\\": "Local Storage\\leveldb\\",
+        "%AppData%\\Wispr Flow\\Network\\": "Network\\"
+      },
+      "AllFilesRequired": false,
+      "DisabledByDefault": true,
+      "ExitBeforeInteract": true,
+      "ExitBeforeSave": true,
+      "Extras": {
+        "ClosingMethod": "Close",
+        "ForceClosingMethod": true,
+        "QuitArgs": "--quit-app",
+        "SearchStartMenuForIcon": true,
+        "BuiltInUsernameFile": "%useremail%",
+        "BuiltInProfileImageFile": "%useravatar%",
+        "BuiltInUserId": "%userid%",
+        "variables": {
+          "userid": "JSON_SELECT::%AppData%\\Wispr Flow\\session.json::sb-dodjkfqhwrzqjwkfnthl-auth-token|@fromstr|user.id",
+          "useremail": "JSON_SELECT::%AppData%\\Wispr Flow\\session.json::sb-dodjkfqhwrzqjwkfnthl-auth-token|@fromstr|user.email",
+          "useravatar": "JSON_SELECT::%AppData%\\Wispr Flow\\config.json::prefs.user.avatarUrl"
+        }
+      },
+      "UniqueIdFile": "JSON_SELECT::%AppData%\\Wispr Flow\\session.json::sb-dodjkfqhwrzqjwkfnthl-auth-token|@fromstr|user.id"
+    },
     "Riot Games": {
       "Identifiers": [ "r", "riot", "riotgames" ],
       "ExeLocationDefault": "C:\\Riot Games\\Riot Client\\RiotClientServices.exe",

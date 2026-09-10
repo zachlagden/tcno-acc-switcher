@@ -103,6 +103,48 @@
       "UniqueIdFile": "leveldb:%UserProfile%/Library/Application Support/discord/Local Storage/leveldb:_https://discord.comMultiAccountStore:_state.users.0.id",
       "UniqueIdMethod": "LEVELDB"
     },
+    "Wispr Flow": {
+      "Identifiers": [
+        "wf",
+        "wispr",
+        "wisprflow"
+      ],
+      "ExeLocationDefault": [
+        "/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow",
+        "%UserProfile%/Applications/Wispr Flow.app/Contents/MacOS/Wispr Flow"
+      ],
+      "ExesToEnd": [
+        "Wispr Flow"
+      ],
+      "PathListToClear": [
+        "SAME_AS_LOGIN_FILES"
+      ],
+      "LoginFiles": {
+        "%UserProfile%/Library/Application Support/Wispr Flow/session.json": "session.json",
+        "%UserProfile%/Library/Application Support/Wispr Flow/config.json": "config.json",
+        "%UserProfile%/Library/Application Support/Wispr Flow/feature-flags-cache.json": "feature-flags-cache.json",
+        "%UserProfile%/Library/Application Support/Wispr Flow/flow.sqlite": "flow.sqlite",
+        "%UserProfile%/Library/Application Support/Wispr Flow/flow.sqlite-wal": "flow.sqlite-wal",
+        "%UserProfile%/Library/Application Support/Wispr Flow/flow.sqlite-shm": "flow.sqlite-shm",
+        "%UserProfile%/Library/Application Support/Wispr Flow/Local Storage/leveldb/": "Local Storage/leveldb/",
+        "%UserProfile%/Library/Application Support/Wispr Flow/Network/": "Network/"
+      },
+      "AllFilesRequired": false,
+      "DisabledByDefault": true,
+      "ExitBeforeInteract": true,
+      "ExitBeforeSave": true,
+      "Extras": {
+        "BuiltInUsernameFile": "%useremail%",
+        "BuiltInProfileImageFile": "%useravatar%",
+        "BuiltInUserId": "%userid%",
+        "variables": {
+          "userid": "JSON_SELECT::%UserProfile%/Library/Application Support/Wispr Flow/session.json::sb-dodjkfqhwrzqjwkfnthl-auth-token|@fromstr|user.id",
+          "useremail": "JSON_SELECT::%UserProfile%/Library/Application Support/Wispr Flow/session.json::sb-dodjkfqhwrzqjwkfnthl-auth-token|@fromstr|user.email",
+          "useravatar": "JSON_SELECT::%UserProfile%/Library/Application Support/Wispr Flow/config.json::prefs.user.avatarUrl"
+        }
+      },
+      "UniqueIdFile": "JSON_SELECT::%UserProfile%/Library/Application Support/Wispr Flow/session.json::sb-dodjkfqhwrzqjwkfnthl-auth-token|@fromstr|user.id"
+    },
     "OBS Studio": {
       "Identifiers": [
         "obs"
