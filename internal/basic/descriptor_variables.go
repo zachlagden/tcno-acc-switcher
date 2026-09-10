@@ -42,6 +42,14 @@ func resolveDescriptorVariables(d platform.Descriptor, folder string, ctx platfo
 				continue
 			}
 		}
+		if isJSONSelectValueReference(v) {
+			resolved, err := resolveJSONSelectReference(d, v, folder, ctx, accountCacheRoot, saved)
+			if err != nil {
+				descriptorVarsLog().Debug("resolve variable via json select failed", "name", name, "saved", saved, "err", err)
+			}
+			out[name] = resolved
+			continue
+		}
 		out[name] = strings.TrimSpace(applyVariableTransformPipeline(expandDescriptorVariables(expandPlatformPath(v, folder, ctx), out)))
 		descriptorVarsLog().Debug("resolved variable via template", "name", name, "valuePreview", previewLevelDBValue(out[name]))
 	}
@@ -92,6 +100,14 @@ func resolveDescriptorValue(d platform.Descriptor, raw, folder string, ctx platf
 			// Do not degrade to plain path expansion for command values.
 			return ""
 		}
+	}
+	if isJSONSelectValueReference(v) {
+		resolved, err := resolveJSONSelectReference(d, v, folder, ctx, accountCacheRoot, saved)
+		if err != nil {
+			descriptorVarsLog().Debug("resolve descriptor value via json select failed", "saved", saved, "err", err)
+			return ""
+		}
+		return strings.TrimSpace(applyVariableTransformPipeline(resolved))
 	}
 	if resolved, handled, err := resolveSQLiteValue(v, folder, ctx); handled {
 		if err != nil {

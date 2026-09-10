@@ -123,7 +123,7 @@ func platformProfileImagesSavedPerAccount(platformKey string) bool {
 		return false
 	}
 	for _, raw := range d.Extras.Variables {
-		if isLevelDBReference(raw) {
+		if isLevelDBReference(raw) || isJSONSelectValueReference(raw) {
 			return true
 		}
 	}
