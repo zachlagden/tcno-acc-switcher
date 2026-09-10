@@ -42,7 +42,10 @@ func (b *BasicService) ClosePlatform(platformKey string) error {
 		return err
 	}
 	platform.EmitActionBarStatusI18nPlatform("Status_ClosingPlatform", platformKey)
-	if err := winutil.KillByName(descriptor.ExesToEnd, method, nil); err != nil {
+	opts := winutil.KillOpts{
+		NativeQuit: descriptorNativeQuit(b.deps(), FlowContext{PlatformKey: platformKey, Descriptor: descriptor}),
+	}
+	if err := winutil.KillByNameWithOpts(descriptor.ExesToEnd, method, opts); err != nil {
 		platform.EmitActionBarStatusI18nPlatform("Status_ClosingPlatformFailed", platformKey)
 		return err
 	}
