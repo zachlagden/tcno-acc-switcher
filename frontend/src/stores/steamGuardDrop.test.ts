@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, type Mock } from "vitest";
 import {
   configureSteamGuardDropAdapter,
   handleSteamGuardDrop,
@@ -9,12 +9,12 @@ import {
 function adapter(): SteamGuardDropAdapter & {
   importMaFiles: ReturnType<typeof vi.fn>;
   decodeQrScreenshot: ReturnType<typeof vi.fn>;
-  reportError: ReturnType<typeof vi.fn>;
+  reportError: Mock<(error: unknown) => void>;
 } {
   return {
     importMaFiles: vi.fn().mockResolvedValue(undefined),
     decodeQrScreenshot: vi.fn().mockResolvedValue(undefined),
-    reportError: vi.fn(),
+    reportError: vi.fn<(error: unknown) => void>(),
   };
 }
 
