@@ -272,6 +272,7 @@ afterEach(() => {
   runtimeMock.handlers.clear();
   runtimeMock.Events.On.mockClear();
   inputModalityMock.markSyntheticControllerKeyEvent.mockClear();
+  vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
