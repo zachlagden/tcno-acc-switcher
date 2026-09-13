@@ -39,6 +39,8 @@ function loaderFor(route: Route): () => Promise<PageModule> {
       return () => import("../pages/ManagePlatforms.svelte");
     case "wispr-stats":
       return () => import("../pages/WisprStats.svelte");
+    case "wispr-settings":
+      return () => import("../pages/WisprSettings.svelte");
   }
 }
 

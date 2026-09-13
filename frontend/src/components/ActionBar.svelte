@@ -184,6 +184,20 @@
             </svg>
           </button
         >
+        <button
+          class="square actionbar__wispr-settings"
+          type="button"
+          aria-label={$t("WisprSettings_Button")}
+          use:tooltip={$t("WisprSettings_Button")}
+          on:mouseenter={() => prefetchPage({ page: "wispr-settings" })}
+          on:focus={() => prefetchPage({ page: "wispr-settings" })}
+          on:click={() => route.set({ page: "wispr-settings" })}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 7h9.2a3 3 0 0 1 5.6 0H20v2h-1.2a3 3 0 0 1-5.6 0H4V7Zm12 1a1 1 0 1 0 0-.01V8ZM4 15h1.2a3 3 0 0 1 5.6 0H20v2h-9.2a3 3 0 0 1-5.6 0H4v-2Zm4 1a1 1 0 1 0 0-.01V16Z"/>
+            </svg>
+          </button
+        >
       {/if}
       <button
         bind:this={filterBtn}

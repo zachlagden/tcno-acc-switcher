@@ -11,7 +11,8 @@ export type Route =
   | { page: "steam-confirmations" }
   | { page: "steam-server-picker" }
   | { page: "steam-browser"; sessionId: string }
-  | { page: "wispr-stats" };
+  | { page: "wispr-stats" }
+  | { page: "wispr-settings" };
 
 export function serializeRoute(r: Route): string {
   switch (r.page) {
@@ -37,6 +38,8 @@ export function serializeRoute(r: Route): string {
       return "#/steam/browser/" + encodeURIComponent(r.sessionId);
     case "wispr-stats":
       return "#/wispr/stats";
+    case "wispr-settings":
+      return "#/wispr/settings";
     default:
       return "#/";
   }
@@ -64,7 +67,13 @@ const ROUTE_PARSERS: Record<string, RouteParser> = {
       default:                  return null;
     }
   },
-  wispr:                (p) => p[1]?.toLowerCase() === "stats" ? { page: "wispr-stats" } : null,
+  wispr:                (p) => {
+    switch (p[1]?.toLowerCase()) {
+      case "stats":    return { page: "wispr-stats" };
+      case "settings": return { page: "wispr-settings" };
+      default:         return null;
+    }
+  },
 };
 
 export function parseHash(hash: string): Route | null {
@@ -100,6 +109,7 @@ export function validateRoute(r: Route, startup: PlatformStartup): Route {
     case "steam-server-picker":
       return nameOk("Steam") ? r : { page: "home" };
     case "wispr-stats":
+    case "wispr-settings":
       return nameOk("Wispr Flow") ? r : { page: "home" };
     default:
       return r;

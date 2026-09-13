@@ -1,0 +1,221 @@
+.wisprsettings-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-bottom: 0.75rem;
+
+  > .SettingsHeader {
+    margin-top: 0;
+  }
+}
+
+.wisprsettings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
+.wisprsettings-note {
+  max-width: 72ch;
+  margin: 0 0 0.75rem;
+  color: var(--role-text-muted);
+  font-size: 0.85rem;
+}
+
+.wisprsettings-error {
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--role-error);
+  border-radius: 4px;
+  color: var(--role-error);
+}
+
+.wisprsettings-problem {
+  display: block;
+  color: var(--role-status-warn);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.wisprsettings-subtle {
+  color: var(--role-text-muted);
+}
+
+.wisprsettings-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+
+  > .btnicontext {
+    margin: 0 0 0.35rem;
+  }
+}
+
+.wisprsettings-voices {
+  margin: 0 0 0.5rem;
+  padding: 0;
+  list-style: none;
+
+  &.is-off {
+    opacity: 0.55;
+  }
+
+  li {
+    display: grid;
+    gap: 0 1rem;
+    padding: 0.3rem 0;
+    grid-template-columns: minmax(8rem, 0.8fr) minmax(9rem, 0.9fr) minmax(0, 2fr);
+    border-bottom: 1px solid var(--role-table-line);
+    font-size: 0.9rem;
+
+    > span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+}
+
+.wisprsettings-voices__name {
+  font-weight: 600;
+}
+
+.wisprsettings-dict,
+.wisprsettings-results {
+  border: 1px solid var(--role-table-border);
+  border-radius: var(--role-table-radius);
+  background: var(--role-table-bg);
+  overflow: hidden;
+}
+
+.wisprsettings-dict {
+  max-height: 22rem;
+  overflow: auto;
+
+  &.is-off {
+    opacity: 0.55;
+  }
+}
+
+.wisprsettings-dict__row {
+  display: grid;
+  align-items: center;
+  gap: 0 0.5rem;
+  padding: 0.25rem 0.5rem;
+  grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 2fr) 4.5rem 2rem;
+  border-bottom: 1px solid var(--role-table-line);
+
+  input[type="text"] {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.wisprsettings-dict__row--head,
+.wisprsettings-results__row--head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border-bottom-color: var(--role-table-border);
+  background: var(--role-table-head-bg);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.wisprsettings-dict__check {
+  text-align: center;
+}
+
+.wisprsettings-dict__remove {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--role-text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--role-error);
+  }
+}
+
+.wisprsettings-dict__empty {
+  padding: 0.75rem;
+  color: var(--role-text-muted);
+  font-size: 0.85rem;
+}
+
+.wisprsettings-dict__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0 0.75rem;
+
+  > .btnicontext {
+    margin: 0;
+  }
+}
+
+.wisprsettings-results__row {
+  display: grid;
+  align-items: start;
+  gap: 0 0.75rem;
+  padding: 0.4rem 0.6rem;
+  grid-template-columns: minmax(10rem, 1.4fr) repeat(3, minmax(7rem, 1fr));
+  border-bottom: 1px solid var(--role-table-line);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.wisprsettings-results__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wisprsettings-status {
+  &.is-applied {
+    color: var(--role-status-good);
+  }
+
+  &.is-off,
+  &.is-unchanged {
+    color: var(--role-text-muted);
+  }
+
+  &.is-failed {
+    color: var(--role-error);
+  }
+}
+
+.wisprsettings-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+
+  > .btnicontext {
+    margin: 0;
+  }
+}
+
+.wisprsettings-dirty {
+  margin-right: auto;
+  color: var(--role-text-muted);
+  font-size: 0.85rem;
+}
