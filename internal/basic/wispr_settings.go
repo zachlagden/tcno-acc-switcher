@@ -262,7 +262,7 @@ func logWisprApplyResult(msg string, r wisprsettings.AccountResult) {
 		"current", r.Current,
 		"prefs", r.Prefs.Status, "prefsProblem", r.Prefs.Problem,
 		"dictionary", r.Dictionary.Status, "dictionaryProblem", r.Dictionary.Problem,
-		"added", r.Dictionary.Added, "updated", r.Dictionary.Updated,
+		"added", r.Dictionary.Added, "restored", r.Dictionary.Restored,
 		"voices", r.Voices.Status, "voicesProblem", r.Voices.Problem,
 		"tokenRefreshed", r.TokenRefreshed)
 }

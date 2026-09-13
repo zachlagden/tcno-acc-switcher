@@ -223,7 +223,7 @@ func normalizeDictionary(in []DictionaryEntry) ([]DictionaryEntry, error) {
 		return nil, fmt.Errorf("too many dictionary entries (%d)", len(in))
 	}
 	out := make([]DictionaryEntry, 0, len(in))
-	seen := make(map[string]int, len(in))
+	seen := make(map[string]bool, len(in))
 	for _, e := range in {
 		e.Word = strings.TrimSpace(e.Word)
 		if e.Word == "" {
@@ -238,11 +238,11 @@ func normalizeDictionary(in []DictionaryEntry) ([]DictionaryEntry, error) {
 		if e.IsSnippet && strings.TrimSpace(e.Replacement) == "" {
 			return nil, fmt.Errorf("snippet %q needs replacement text", truncateRunes(e.Word, 40))
 		}
-		if i, ok := seen[e.Word]; ok {
-			out[i] = e
+		key := NormalizeWord(e.Word)
+		if seen[key] {
 			continue
 		}
-		seen[e.Word] = len(out)
+		seen[key] = true
 		out = append(out, e)
 	}
 	return out, nil

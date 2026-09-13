@@ -38,10 +38,10 @@ const (
 var errCurrentExpired = errors.New("wisprsettings: the live session needs Wispr to renew it")
 
 type PartResult struct {
-	Status  string `json:"status"`
-	Problem string `json:"problem"`
-	Added   int    `json:"added"`
-	Updated int    `json:"updated"`
+	Status   string `json:"status"`
+	Problem  string `json:"problem"`
+	Added    int    `json:"added"`
+	Restored int    `json:"restored"`
 }
 
 type AccountResult struct {
@@ -85,7 +85,7 @@ func (s *Syncer) Apply(ctx context.Context, a wisprstats.Account, p Profile, opt
 		res.Prefs = s.applyPrefs(ctx, auth, a, p, opts)
 	}
 	if p.Parts.Dictionary {
-		res.Dictionary = s.applyDictionary(ctx, auth, p)
+		res.Dictionary = s.applyDictionary(ctx, auth, a, p)
 	}
 	if p.Parts.Voices {
 		res.Voices = s.applyVoices(a, p, opts)
@@ -148,14 +148,18 @@ func (s *Syncer) applyPrefs(ctx context.Context, auth *accountAuth, a wisprstats
 	return res
 }
 
-func (s *Syncer) applyDictionary(ctx context.Context, auth *accountAuth, p Profile) PartResult {
+func (s *Syncer) applyDictionary(ctx context.Context, auth *accountAuth, a wisprstats.Account, p Profile) PartResult {
+	local, err := ReadLocalDictionary(filepath.Join(a.Dir, FlowDBFileName))
+	if err != nil {
+		local = nil
+	}
 	var plan DictionaryPlan
-	err := auth.do(ctx, func(token string) error {
+	err = auth.do(ctx, func(token string) error {
 		remote, err := s.Client.GetDictionary(ctx, token)
 		if err != nil {
 			return err
 		}
-		plan, err = PlanDictionary(remote, p.Dictionary, s.now(), s.newID)
+		plan, err = PlanDictionary(remote, local, p.Dictionary, s.now(), s.newID)
 		if err != nil || len(plan.Upserts) == 0 {
 			return err
 		}
@@ -167,7 +171,7 @@ func (s *Syncer) applyDictionary(ctx context.Context, auth *accountAuth, p Profi
 	if len(plan.Upserts) == 0 {
 		return PartResult{Status: StatusUnchanged}
 	}
-	return PartResult{Status: StatusApplied, Added: plan.Added, Updated: plan.Updated}
+	return PartResult{Status: StatusApplied, Added: plan.Added, Restored: plan.Restored}
 }
 
 func (s *Syncer) applyVoices(a wisprstats.Account, p Profile, opts ApplyOptions) PartResult {

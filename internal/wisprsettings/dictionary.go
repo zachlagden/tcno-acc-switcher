@@ -17,25 +17,34 @@ const (
 )
 
 type DictionaryPlan struct {
-	Upserts []RemoteItem
-	Added   int
-	Updated int
+	Upserts  []RemoteItem
+	Added    int
+	Restored int
 }
 
-func PlanDictionary(remote []RemoteItem, entries []DictionaryEntry, now time.Time, newID func() string) (DictionaryPlan, error) {
-	byWord := map[string]RemoteItem{}
+func NormalizeWord(word string) string {
+	return strings.ToLower(strings.Join(strings.Fields(word), " "))
+}
+
+func PlanDictionary(remote, local []RemoteItem, entries []DictionaryEntry, now time.Time, newID func() string) (DictionaryPlan, error) {
+	present := map[string]bool{}
+	for _, items := range [][]RemoteItem{remote, local} {
+		for _, item := range items {
+			if key := NormalizeWord(itemString(item, "word")); key != "" && !itemBool(item, "is_deleted") {
+				present[key] = true
+			}
+		}
+	}
+	deleted := map[string]RemoteItem{}
 	for _, item := range remote {
-		if !isPersonal(item) {
+		key := NormalizeWord(itemString(item, "word"))
+		if key == "" || !itemBool(item, "is_deleted") || !isPersonal(item) {
 			continue
 		}
-		word := strings.TrimSpace(itemString(item, "word"))
-		if word == "" {
+		if existing, ok := deleted[key]; ok && itemString(existing, "modified_at") >= itemString(item, "modified_at") {
 			continue
 		}
-		if existing, ok := byWord[word]; ok && !itemBool(existing, "is_deleted") {
-			continue
-		}
-		byWord[word] = item
+		deleted[key] = item
 	}
 
 	stamp, err := json.Marshal(now.UTC().Format("2006-01-02T15:04:05.000Z"))
@@ -44,39 +53,32 @@ func PlanDictionary(remote []RemoteItem, entries []DictionaryEntry, now time.Tim
 	}
 	plan := DictionaryPlan{}
 	for _, e := range entries {
-		word := strings.TrimSpace(e.Word)
-		if word == "" {
+		key := NormalizeWord(e.Word)
+		if key == "" || present[key] {
 			continue
 		}
-		existing, ok := byWord[word]
-		if !ok {
-			item, err := newDictionaryItem(e, word, newID(), stamp)
-			if err != nil {
-				return DictionaryPlan{}, err
-			}
+		present[key] = true
+		if tombstone, ok := deleted[key]; ok {
+			item := maps.Clone(tombstone)
+			item["is_deleted"] = json.RawMessage("false")
+			item["modified_at"] = stamp
 			plan.Upserts = append(plan.Upserts, item)
-			byWord[word] = item
-			plan.Added++
+			plan.Restored++
 			continue
 		}
-		if !itemBool(existing, "is_deleted") && sameEntry(existing, e) {
-			continue
-		}
-		item := maps.Clone(existing)
-		if err := setEntryFields(item, e); err != nil {
+		item, err := newDictionaryItem(e, strings.Join(strings.Fields(e.Word), " "), newID(), stamp)
+		if err != nil {
 			return DictionaryPlan{}, err
 		}
-		item["is_deleted"] = json.RawMessage("false")
-		item["modified_at"] = stamp
 		plan.Upserts = append(plan.Upserts, item)
-		byWord[word] = item
-		plan.Updated++
+		plan.Added++
 	}
 	return plan, nil
 }
 
 func ImportableEntries(remote []RemoteItem, email string) ([]DictionaryEntry, int) {
 	out := []DictionaryEntry{}
+	seen := map[string]bool{}
 	excluded := 0
 	for _, item := range remote {
 		if itemBool(item, "is_deleted") || !isPersonal(item) {
@@ -95,6 +97,11 @@ func ImportableEntries(remote []RemoteItem, email string) ([]DictionaryEntry, in
 			excluded++
 			continue
 		}
+		key := NormalizeWord(e.Word)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
 		out = append(out, e)
 	}
 	return out, excluded
@@ -159,12 +166,6 @@ func setEntryFields(item RemoteItem, e DictionaryEntry) error {
 		item["is_snippet"] = json.RawMessage("true")
 	}
 	return nil
-}
-
-func sameEntry(item RemoteItem, e DictionaryEntry) bool {
-	return itemString(item, "replacement") == e.Replacement &&
-		itemString(item, "replacement_html") == e.ReplacementHTML &&
-		itemBool(item, "is_snippet") == e.IsSnippet
 }
 
 func mentionsEmail(e DictionaryEntry, email string) bool {

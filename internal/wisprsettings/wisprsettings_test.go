@@ -119,6 +119,18 @@ func (f *fakeWispr) handler(t *testing.T) http.Handler {
 				t.Errorf("dictionary POST body is not a bare array: %v", err)
 			}
 			f.dictPosts = append(f.dictPosts, items)
+			for _, it := range items {
+				replaced := false
+				for i, existing := range f.dictionary {
+					if existing["id"] == it["id"] {
+						f.dictionary[i] = it
+						replaced = true
+					}
+				}
+				if !replaced {
+					f.dictionary = append(f.dictionary, it)
+				}
+			}
 			_ = json.NewEncoder(w).Encode(items)
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -295,50 +307,70 @@ func TestApplyNeverRefreshesLiveSession(t *testing.T) {
 	}
 }
 
-func TestPlanDictionaryAddsAndUpdatesWithoutDeletesOrDupes(t *testing.T) {
-	remote := []RemoteItem{
-		item(t, map[string]any{"id": "r1", "team_dictionary_id": PersonalTeamID, "word": "same", "replacement": nil, "replacement_html": nil, "is_snippet": false, "is_deleted": false, "frequency_used": 4}),
-		item(t, map[string]any{"id": "r2", "team_dictionary_id": PersonalTeamID, "word": "brb", "replacement": "be back", "is_snippet": true, "is_deleted": false, "frequency_used": 9, "source": "manual"}),
-		item(t, map[string]any{"id": "r3", "team_dictionary_id": PersonalTeamID, "word": "revived", "is_deleted": true}),
-		item(t, map[string]any{"id": "r4", "team_dictionary_id": "11111111-1111-1111-1111-111111111111", "word": "teamword", "is_deleted": false}),
-		item(t, map[string]any{"id": "r5", "team_dictionary_id": PersonalTeamID, "word": "keepme", "is_deleted": false}),
-	}
-	entries := []DictionaryEntry{
-		{Word: "same"},
-		{Word: "brb", Replacement: "be right back", IsSnippet: true},
-		{Word: "revived"},
-		{Word: "teamword"},
-		{Word: "fresh", Replacement: "Fresh Co", ReplacementHTML: "<b>Fresh</b>"},
-	}
+func planWords(t *testing.T, remote, local []RemoteItem, words ...DictionaryEntry) DictionaryPlan {
+	t.Helper()
 	n := 0
-	plan, err := PlanDictionary(remote, entries, testNow, func() string { n++; return "id-" + string(rune('0'+n)) })
+	plan, err := PlanDictionary(remote, local, words, testNow, func() string { n++; return "id-" + string(rune('0'+n)) })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.Added != 2 || plan.Updated != 2 || len(plan.Upserts) != 4 {
-		t.Fatalf("added=%d updated=%d upserts=%d", plan.Added, plan.Updated, len(plan.Upserts))
-	}
-	byWord := map[string]RemoteItem{}
 	for _, it := range plan.Upserts {
 		if itemBool(it, "is_deleted") {
 			t.Fatalf("upsert deletes %s", itemString(it, "word"))
 		}
-		w := itemString(it, "word")
-		if _, dup := byWord[w]; dup {
-			t.Fatalf("duplicate upsert for %s", w)
-		}
-		byWord[w] = it
 	}
-	brb := byWord["brb"]
-	if itemString(brb, "id") != "r2" || itemString(brb, "replacement") != "be right back" || string(brb["frequency_used"]) != "9" {
-		t.Fatalf("brb update = %v", brb)
+	return plan
+}
+
+func TestPlanDictionaryIgnoresCaseAndSpacing(t *testing.T) {
+	remote := []RemoteItem{item(t, map[string]any{"id": "r1", "team_dictionary_id": PersonalTeamID, "word": "Wispr Flow", "is_deleted": false})}
+	plan := planWords(t, remote, nil, DictionaryEntry{Word: "wispr flow"}, DictionaryEntry{Word: " Wispr  Flow "}, DictionaryEntry{Word: "WISPR\tFLOW"})
+	if len(plan.Upserts) != 0 {
+		t.Fatalf("re-added a variant: %v", plan.Upserts)
 	}
-	if itemString(byWord["revived"], "id") != "r3" {
-		t.Fatal("tombstone not revived in place")
+}
+
+func TestPlanDictionaryNeverAddsTeamWords(t *testing.T) {
+	remote := []RemoteItem{item(t, map[string]any{"id": "r4", "team_dictionary_id": "11111111-1111-1111-1111-111111111111", "word": "TeamWord", "is_deleted": false})}
+	if plan := planWords(t, remote, nil, DictionaryEntry{Word: "teamword"}); len(plan.Upserts) != 0 {
+		t.Fatalf("added a personal copy of a team word: %v", plan.Upserts)
 	}
-	fresh := byWord["fresh"]
+}
+
+func TestPlanDictionaryLeavesExistingEntriesUntouched(t *testing.T) {
+	remote := []RemoteItem{item(t, map[string]any{"id": "r2", "team_dictionary_id": PersonalTeamID, "word": "brb", "replacement": "be back", "is_snippet": true, "is_deleted": false})}
+	plan := planWords(t, remote, nil, DictionaryEntry{Word: "BRB", Replacement: "be right back", IsSnippet: false})
+	if len(plan.Upserts) != 0 {
+		t.Fatalf("modified an existing entry: %v", plan.Upserts)
+	}
+}
+
+func TestPlanDictionaryRestoresNewestTombstoneOnce(t *testing.T) {
+	remote := []RemoteItem{
+		item(t, map[string]any{"id": "old", "team_dictionary_id": PersonalTeamID, "word": "Revived", "replacement": "x", "is_deleted": true, "modified_at": "2026-01-01T00:00:00.000Z"}),
+		item(t, map[string]any{"id": "new", "team_dictionary_id": PersonalTeamID, "word": "revived ", "replacement": "y", "is_deleted": true, "modified_at": "2026-05-01T00:00:00.000Z"}),
+	}
+	plan := planWords(t, remote, nil, DictionaryEntry{Word: "REVIVED", Replacement: "z"}, DictionaryEntry{Word: "revived"})
+	if len(plan.Upserts) != 1 || plan.Restored != 1 || plan.Added != 0 {
+		t.Fatalf("plan = %+v", plan)
+	}
+	got := plan.Upserts[0]
+	if itemString(got, "id") != "new" || itemString(got, "word") != "revived " || itemString(got, "replacement") != "y" {
+		t.Fatalf("restored the wrong row or changed it: %v", got)
+	}
+	if itemString(got, "modified_at") != "2026-09-13T12:00:00.000Z" {
+		t.Fatalf("modified_at = %s", got["modified_at"])
+	}
+}
+
+func TestPlanDictionaryAddsMissingWordOnce(t *testing.T) {
+	plan := planWords(t, nil, nil, DictionaryEntry{Word: " Fresh  Co ", Replacement: "Fresh Co", ReplacementHTML: "<b>Fresh</b>"}, DictionaryEntry{Word: "fresh co"})
+	if plan.Added != 1 || len(plan.Upserts) != 1 {
+		t.Fatalf("plan = %+v", plan)
+	}
+	fresh := plan.Upserts[0]
 	want := map[string]string{
-		"id": `"id-2"`, "team_dictionary_id": `"` + PersonalTeamID + `"`, "is_manual": "true", "source": `"manual"`,
+		"id": `"id-1"`, "word": `"Fresh Co"`, "team_dictionary_id": `"` + PersonalTeamID + `"`, "is_manual": "true", "source": `"manual"`,
 		"is_deleted": "false", "is_snippet": "false", "replacement": `"Fresh Co"`,
 		"created_at": `"2026-09-13T12:00:00.000Z"`, "modified_at": `"2026-09-13T12:00:00.000Z"`, "frequency_used": "0", "last_used": "null",
 	}
@@ -348,11 +380,50 @@ func TestPlanDictionaryAddsAndUpdatesWithoutDeletesOrDupes(t *testing.T) {
 		}
 	}
 	if itemString(fresh, "replacement_html") != "<b>Fresh</b>" {
-		t.Errorf("new item replacement_html = %s", fresh["replacement_html"])
+		t.Errorf("replacement_html = %s", fresh["replacement_html"])
 	}
-	team := byWord["teamword"]
-	if itemString(team, "team_dictionary_id") != PersonalTeamID || itemString(team, "id") == "r4" {
-		t.Fatal("team row was modified instead of adding a personal row")
+}
+
+func TestApplyDictionarySkipsLocalOnlyRowsAndIsIdempotent(t *testing.T) {
+	f := &fakeWispr{}
+	s := newTestSyncer(t, f)
+	dir := accountDir(t, "tok-a", testNow.Unix()+3600, "")
+	db, err := os.ReadFile(filepath.Join("testdata", FlowDBFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, FlowDBFileName), db, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p := DefaultProfile()
+	p.Parts.Dictionary = true
+	p.Dictionary = []DictionaryEntry{{Word: "kubernetes"}, {Word: "BRB", Replacement: "other", IsSnippet: true}, {Word: "TEAMWORD"}, {Word: "Gone"}, {Word: "New Word"}}
+	opts := ApplyOptions{AllowRefresh: true, LocalConfigWritable: true}
+	res := s.Apply(context.Background(), wisprstats.Account{Dir: dir}, p, opts)
+	if res.Dictionary.Status != StatusApplied || res.Dictionary.Added != 2 || len(f.dictPosts) != 1 {
+		t.Fatalf("first apply = %+v posts=%v", res.Dictionary, f.dictPosts)
+	}
+	words := []string{}
+	for _, it := range f.dictPosts[0] {
+		words = append(words, it["word"].(string))
+	}
+	if strings.Join(words, ",") != "Gone,New Word" {
+		t.Fatalf("posted words = %v", words)
+	}
+	res = s.Apply(context.Background(), wisprstats.Account{Dir: dir}, p, opts)
+	if res.Dictionary.Status != StatusUnchanged || len(f.dictPosts) != 1 {
+		t.Fatalf("second apply = %+v posts=%d", res.Dictionary, len(f.dictPosts))
+	}
+}
+
+func TestImportCollapsesDuplicateWords(t *testing.T) {
+	remote := []RemoteItem{
+		item(t, map[string]any{"word": "Wispr Flow", "source": "manual", "team_dictionary_id": PersonalTeamID}),
+		item(t, map[string]any{"word": " wispr  flow", "source": "user_edits", "team_dictionary_id": PersonalTeamID}),
+	}
+	entries, excluded := ImportableEntries(remote, "")
+	if len(entries) != 1 || entries[0].Word != "Wispr Flow" || excluded != 0 {
+		t.Fatalf("entries = %+v excluded=%d", entries, excluded)
 	}
 }
 
@@ -475,13 +546,13 @@ func TestProfileStoreRoundTripAndValidation(t *testing.T) {
 	p = stylesProfile()
 	p.Target = TargetSelected
 	p.SelectedAccounts = []string{" a ", "a", "b", ""}
-	p.Dictionary = []DictionaryEntry{{Word: " x "}, {Word: ""}, {Word: "x", Replacement: "y"}}
+	p.Dictionary = []DictionaryEntry{{Word: " x "}, {Word: ""}, {Word: "X", Replacement: "y"}, {Word: "Two  Words"}, {Word: "two words"}}
 	write := func(path string, data []byte) error { return os.WriteFile(path, data, 0o600) }
 	saved, err := SaveProfile(path, p, write)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(saved.SelectedAccounts, ",") != "a,b" || len(saved.Dictionary) != 1 || saved.Dictionary[0].Replacement != "y" {
+	if strings.Join(saved.SelectedAccounts, ",") != "a,b" || len(saved.Dictionary) != 2 || saved.Dictionary[0].Word != "x" || saved.Dictionary[0].Replacement != "" || saved.Dictionary[1].Word != "Two  Words" {
 		t.Fatalf("normalized = %+v", saved)
 	}
 	loaded, err := LoadProfile(path)
