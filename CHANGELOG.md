@@ -5,6 +5,21 @@ https://github.com/TCNOco/TcNo-Acc-Switcher.
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-09-13
+
+### Added
+- Wispr Flow settings sync: a settings page in the switcher that holds one profile of Wispr
+  styles per app type, auto cleanup level, My Voice categories and dictionary words.
+  - Import the profile from any saved account.
+  - Apply it straight away to every saved account, or only the ones you pick.
+  - Have it applied automatically when switching to an account, before Wispr starts.
+- Styles and auto cleanup go through Wispr's own preferences API. Dictionary words are only added
+  when an account doesn't already have them (compared ignoring case and spacing, including team
+  words and words not yet uploaded); existing entries are never changed or deleted.
+
+### Changed
+- Test dependencies: vitest 4.1.11, which fixes the vitest and @vitest/mocker advisory.
+
 ## [4.1.0] - 2026-09-10
 
 First release from this fork, built on upstream 4.0.7.
