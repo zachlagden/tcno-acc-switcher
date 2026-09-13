@@ -127,6 +127,10 @@
   white-space: nowrap;
 }
 
+.wisprsettings-dict__row.is-dup input[type="text"]:first-child {
+  border-color: var(--role-status-warn);
+}
+
 .wisprsettings-dict__check {
   text-align: center;
 }

@@ -48,6 +48,33 @@ type ProfileLike = {
 
 let nextKey = 0;
 
+export function normalizeWord(word: string): string {
+  return word.trim().split(/\s+/).filter(Boolean).join(" ").toLowerCase();
+}
+
+export function dedupeEntries(entries: DraftEntry[]): DraftEntry[] {
+  const seen = new Set<string>();
+  return entries.filter((e) => {
+    const key = normalizeWord(e.word);
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function duplicateEntryKeys(entries: DraftEntry[]): Set<number> {
+  const seen = new Set<string>();
+  const dupes = new Set<number>();
+  for (const e of entries) {
+    const key = normalizeWord(e.word);
+    if (!key) continue;
+    if (seen.has(key)) dupes.add(e.key);
+    seen.add(key);
+  }
+  return dupes;
+}
+
 export function newEntryKey(): number {
   nextKey += 1;
   return nextKey;
@@ -82,15 +109,17 @@ export function draftFromProfile(p: ProfileLike | null | undefined): Draft {
     },
     autoCleanupLevel: p?.autoCleanupLevel || "light",
     userVoices: voices,
-    dictionary: (p?.dictionary ?? [])
-      .filter((e): e is NonNullable<typeof e> => !!e)
-      .map((e) => ({
-        key: newEntryKey(),
-        word: e.word ?? "",
-        replacement: e.replacement ?? "",
-        replacementHtml: e.replacementHtml ?? "",
-        isSnippet: !!e.isSnippet,
-      })),
+    dictionary: dedupeEntries(
+      (p?.dictionary ?? [])
+        .filter((e): e is NonNullable<typeof e> => !!e)
+        .map((e) => ({
+          key: newEntryKey(),
+          word: e.word ?? "",
+          replacement: e.replacement ?? "",
+          replacementHtml: e.replacementHtml ?? "",
+          isSnippet: !!e.isSnippet,
+        })),
+    ),
     applyOnSwitch: !!p?.applyOnSwitch,
     target: p?.target === "selected" ? "selected" : "all",
     selectedAccounts: [...(p?.selectedAccounts ?? [])],
@@ -107,7 +136,7 @@ export function profileFromDraft(d: Draft) {
     styles: { ...d.styles },
     autoCleanupLevel: d.autoCleanupLevel,
     userVoices: Object.fromEntries(Object.entries(d.userVoices).map(([id, v]) => [id, { ...v, appNames: [...v.appNames] }])),
-    dictionary: d.dictionary
+    dictionary: dedupeEntries(d.dictionary)
       .filter((e) => e.word.trim() !== "")
       .map((e) => ({
         word: e.word.trim(),
@@ -139,13 +168,9 @@ export function mergeImport(current: Draft, imported: ProfileLike): Draft {
 }
 
 export function entryProblem(d: Draft): "duplicate" | "snippet" | null {
-  const seen = new Set<string>();
+  if (duplicateEntryKeys(d.dictionary).size > 0) return "duplicate";
   for (const e of d.dictionary) {
-    const word = e.word.trim();
-    if (!word) continue;
-    if (seen.has(word)) return "duplicate";
-    seen.add(word);
-    if (e.isSnippet && e.replacement.trim() === "") return "snippet";
+    if (e.word.trim() && e.isSnippet && e.replacement.trim() === "") return "snippet";
   }
   return null;
 }

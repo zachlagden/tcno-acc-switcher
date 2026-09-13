@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { draftFromProfile, draftSignature, entryProblem, mergeImport, profileFromDraft } from "./settingsDraft";
+import {
+  draftFromProfile,
+  draftSignature,
+  duplicateEntryKeys,
+  entryProblem,
+  mergeImport,
+  normalizeWord,
+  profileFromDraft,
+} from "./settingsDraft";
 
 describe("settingsDraft", () => {
   it("round-trips a profile and drops blank dictionary rows", () => {
@@ -42,8 +50,29 @@ describe("settingsDraft", () => {
   });
 
   it("flags duplicate words and empty snippets", () => {
-    expect(entryProblem(draftFromProfile({ dictionary: [{ word: "a" }, { word: "a" }] }))).toBe("duplicate");
+    const dup = draftFromProfile({ dictionary: [{ word: "a" }] });
+    dup.dictionary.push({ key: 998, word: "A", replacement: "", replacementHtml: "", isSnippet: false });
+    expect(entryProblem(dup)).toBe("duplicate");
     expect(entryProblem(draftFromProfile({ dictionary: [{ word: "s", isSnippet: true }] }))).toBe("snippet");
     expect(entryProblem(draftFromProfile({ dictionary: [{ word: "s", replacement: "x", isSnippet: true }] }))).toBeNull();
+  });
+});
+
+describe("settingsDraft dedupe", () => {
+  it("treats case and spacing variants as the same word", () => {
+    expect(normalizeWord(" Wispr  Flow ")).toBe("wispr flow");
+    const d = draftFromProfile({ dictionary: [{ word: "Wispr Flow" }] });
+    d.dictionary.push({ key: 999, word: "wispr   flow", replacement: "", replacementHtml: "", isSnippet: false });
+    expect(duplicateEntryKeys(d.dictionary)).toEqual(new Set([999]));
+    expect(entryProblem(d)).toBe("duplicate");
+  });
+
+  it("keeps the first occurrence when loading, saving and importing", () => {
+    const d = draftFromProfile({ dictionary: [{ word: "Kubernetes", replacement: "k8s" }, { word: "kubernetes " }] });
+    expect(d.dictionary.map((e) => e.word)).toEqual(["Kubernetes"]);
+    d.dictionary.push({ key: 1000, word: "KUBERNETES", replacement: "", replacementHtml: "", isSnippet: false });
+    expect(profileFromDraft(d).dictionary).toEqual([{ word: "Kubernetes", replacement: "k8s", replacementHtml: "", isSnippet: false }]);
+    const merged = mergeImport(d, { dictionary: [{ word: "Flow" }, { word: "FLOW" }] });
+    expect(merged.dictionary.map((e) => e.word)).toEqual(["Flow"]);
   });
 });

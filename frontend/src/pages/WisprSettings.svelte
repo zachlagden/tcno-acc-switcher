@@ -16,6 +16,7 @@
     TARGET_VALUES,
     draftFromProfile,
     draftSignature,
+    duplicateEntryKeys,
     entryProblem,
     mergeImport,
     newEntryKey,
@@ -59,6 +60,7 @@
   $: dirty = draftSignature(draft) !== savedSig;
   $: busy = loading || saving || importing || applying;
   $: dictProblem = entryProblem(draft);
+  $: dupKeys = duplicateEntryKeys(draft.dictionary);
   $: anyPart = draft.parts.styles || draft.parts.autoCleanup || draft.parts.voices || draft.parts.dictionary;
   $: voiceList = Object.values(draft.userVoices);
   $: importOptions = accounts.map((a) => a.uniqueId);
@@ -186,7 +188,7 @@
   function partText(p: PartResult | undefined, kind: PartKind): string {
     if (!p) return "";
     if (kind === "dictionary" && p.status === "applied") {
-      return $t("WisprSettings_Result_DictApplied", { added: p.added, updated: p.updated });
+      return $t("WisprSettings_Result_DictApplied", { added: p.added, restored: p.restored });
     }
     return $t(`WisprSettings_Result_${p.status}`);
   }
@@ -350,7 +352,7 @@
             <span role="columnheader" aria-label={$t("WisprSettings_Dict_Remove")}></span>
           </div>
           {#each draft.dictionary as entry, i (entry.key)}
-            <div class="wisprsettings-dict__row" role="row">
+            <div class="wisprsettings-dict__row" class:is-dup={dupKeys.has(entry.key)} role="row">
               <span role="cell">
                 <input
                   type="text"
@@ -358,8 +360,12 @@
                   autocomplete="off"
                   maxlength="255"
                   aria-label={$t("WisprSettings_Dict_Word")}
+                  aria-invalid={dupKeys.has(entry.key)}
                   bind:value={draft.dictionary[i].word}
                 />
+                {#if dupKeys.has(entry.key)}
+                  <span class="wisprsettings-problem">{$t("WisprSettings_Dict_AlreadyListed")}</span>
+                {/if}
               </span>
               <span role="cell">
                 <input
