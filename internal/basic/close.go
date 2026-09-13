@@ -21,6 +21,10 @@ func (b *BasicService) ClosePlatform(platformKey string) error {
 	if err := security.RequireUnlocked(); err != nil {
 		return err
 	}
+	return b.closePlatformLocked(platformKey)
+}
+
+func (b *BasicService) closePlatformLocked(platformKey string) error {
 	platformKey = strings.TrimSpace(platformKey)
 	if platformKey == "" {
 		return errors.New("platform is required")

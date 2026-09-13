@@ -555,6 +555,7 @@
   "Status_ActionBar_SavingSession": "Saving current session…",
   "Status_ActionBar_ClearingSession": "Clearing current session…",
   "Status_ActionBar_RestoringAccount": "Restoring saved account…",
+  "Status_WisprApplyingSettings": "Applying Wispr Flow settings…",
   "Status_ActionBar_UpdatingSteamLogin": "Updating Steam login data…",
   "Status_ActionBar_UpdatingSteamPersona": "Updating Steam profile state…",
   "Tags_Section": "Tags",

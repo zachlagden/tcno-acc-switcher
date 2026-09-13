@@ -815,6 +815,7 @@ func SwapTo(deps FlowDeps, platformKey, uniqueID string, extraLaunchArgs []strin
 	if err := Login(deps, fc, accName); err != nil {
 		return wrapNeedsAdminIfPermission(err)
 	}
+	applyWisprSettingsOnSwitch(platformKey, uniqueID, accName)
 	_ = touchLastUsed(fc.PlatformKey, uniqueID)
 	recordBasicTrayRecent(platformKey, uniqueID)
 	stability.OnSuccessfulSwitch(platformKey)
